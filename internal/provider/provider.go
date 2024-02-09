@@ -1,84 +1,92 @@
-// Copyright (c) HashiCorp, Inc.
-// SPDX-License-Identifier: MPL-2.0
-
 package provider
 
 import (
 	"context"
-	"net/http"
+	"os"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-// Ensure ScaffoldingProvider satisfies various provider interfaces.
-var _ provider.Provider = &ScaffoldingProvider{}
+var (
+	_ provider.Provider = &kalixProvider{}
+)
 
-// ScaffoldingProvider defines the provider implementation.
-type ScaffoldingProvider struct {
-	// version is set to the provider version on release, "dev" when the
-	// provider is built and ran locally, and "test" when running acceptance
-	// testing.
+type kalixProvider struct {
 	version string
 }
 
-// ScaffoldingProviderModel describes the provider data model.
-type ScaffoldingProviderModel struct {
-	Endpoint types.String `tfsdk:"endpoint"`
+type kalixProviderModel struct {
+	Path types.String `tfsdk:"path"`
 }
 
-func (p *ScaffoldingProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
-	resp.TypeName = "scaffolding"
-	resp.Version = p.version
+func (k *kalixProvider) Metadata(_ context.Context, _ provider.MetadataRequest, response *provider.MetadataResponse) {
+	response.TypeName = "kalix"
+	response.Version = k.version
 }
 
-func (p *ScaffoldingProvider) Schema(ctx context.Context, req provider.SchemaRequest, resp *provider.SchemaResponse) {
-	resp.Schema = schema.Schema{
+func (k *kalixProvider) Schema(_ context.Context, _ provider.SchemaRequest, response *provider.SchemaResponse) {
+	response.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
-			"endpoint": schema.StringAttribute{
-				MarkdownDescription: "Example provider attribute",
-				Optional:            true,
+			"path": schema.StringAttribute{
+				Optional: true,
 			},
 		},
 	}
 }
 
-func (p *ScaffoldingProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
-	var data ScaffoldingProviderModel
-
-	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
-
-	if resp.Diagnostics.HasError() {
+func (k *kalixProvider) Configure(ctx context.Context, request provider.ConfigureRequest, response *provider.ConfigureResponse) {
+	var kpm kalixProviderModel
+	diagnostics := request.Config.Get(ctx, &kpm)
+	response.Diagnostics.Append(diagnostics...)
+	if response.Diagnostics.HasError() {
 		return
 	}
 
-	// Configuration values are now available.
-	// if data.Endpoint.IsNull() { /* ... */ }
-
-	// Example client configuration for data sources and resources
-	client := http.DefaultClient
-	resp.DataSourceData = client
-	resp.ResourceData = client
-}
-
-func (p *ScaffoldingProvider) Resources(ctx context.Context) []func() resource.Resource {
-	return []func() resource.Resource{
-		NewExampleResource,
+	if kpm.Path.IsUnknown() {
+		response.Diagnostics.AddAttributeError(
+			path.Root("path"),
+			"Unknown path for the kalix cli",
+			"use the KALIX_PATH environment variable.")
 	}
+
+	if response.Diagnostics.HasError() {
+		return
+	}
+	kalixPath := os.Getenv("KALIX_PATH")
+	if !kpm.Path.IsNull() {
+		kalixPath = kpm.Path.ValueString()
+	}
+
+	if kalixPath == "" {
+		response.Diagnostics.AddAttributeError(
+			path.Root("path"),
+			"Missing Kalix CLI Path", "",
+		)
+	}
+
+	response.DataSourceData = kalixPath
+	response.ResourceData = kalixPath
+
 }
 
-func (p *ScaffoldingProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
+func (k *kalixProvider) Resources(_ context.Context) []func() resource.Resource {
+	return nil
+}
+
+func (k *kalixProvider) DataSources(_ context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
-		NewExampleDataSource,
+		NewKalixCliVersionDataSource,
 	}
 }
 
 func New(version string) func() provider.Provider {
 	return func() provider.Provider {
-		return &ScaffoldingProvider{
+		return &kalixProvider{
 			version: version,
 		}
 	}

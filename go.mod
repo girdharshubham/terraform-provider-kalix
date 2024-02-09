@@ -1,4 +1,4 @@
-module github.com/girdharshubham/terraform-provide-kalix
+module github.com/girdharshubham/terraform-provider-kalix
 
 go 1.20
 
